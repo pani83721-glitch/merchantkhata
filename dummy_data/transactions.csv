@@ -1,27 +1,25 @@
-customerName,product,type,amount,notes,daysAgo
-Rajesh Kumar,Sugar,Credit,450,5kg Sugar purchase,0
-Rajesh Kumar,,Payment,1000,UPI Payment received,0
-Suresh Yadav,Rice Bags,Credit,2400,2x Rice Bags,0
-Anita Sharma,Tata Salt,Credit,75,3x Tata Salt packets,0
-Anita Sharma,Maggi Noodles,Credit,140,10x Maggi packs,0
-Priya Patel,,Payment,500,Cash payment,0
-Lakshmi Devi,Tea Powder,Credit,700,2x Tea Powder,0
-Ramesh Gupta,Sunflower Oil,Credit,360,2L Sunflower Oil,0
-Rajesh Kumar,Aashirvaad Atta,Credit,500,2x Atta bags,1
-Suresh Yadav,,Payment,800,Cash partial payment,1
-Priya Patel,Toor Dal,Credit,480,3kg Toor Dal,1
-Lakshmi Devi,,Payment,300,UPI Payment,1
-Ramesh Gupta,Detergent Powder,Credit,240,2x Detergent,1
-Anita Sharma,,Payment,200,Cash payment,1
-Rajesh Kumar,Parle-G Biscuits,Credit,50,10x Parle-G,2
-Suresh Yadav,Sugar,Credit,270,6kg Sugar,2
-Priya Patel,,Payment,1500,Monthly settlement,2
-Ramesh Gupta,,Payment,600,UPI Payment,2
-Lakshmi Devi,Aashirvaad Atta,Credit,250,1x Atta bag,3
-Suresh Yadav,Tea Powder,Credit,350,1x Tea Powder,3
-Rajesh Kumar,,Payment,2000,Weekly settlement,4
-Priya Patel,Rice Bags,Credit,1200,1x Rice bag,4
-Anita Sharma,Sunflower Oil,Credit,180,1L Oil,5
-Ramesh Gupta,Maggi Noodles,Credit,70,5x Maggi,5
-Lakshmi Devi,,Payment,450,Cash payment,6
-Suresh Yadav,,Payment,1200,Full settlement,6
+Customer,Product,Type,Amount,Date,Notes
+Rajesh Kumar,Sugar,Credit,450,Today,5kg Sugar purchase
+Rajesh Kumar,None,Payment,1000,Today,UPI Payment received
+Suresh Yadav,Rice Bags,Credit,2400,Today,2x Rice Bags
+Arjun Reddy,Maggi Noodles,Credit,280,Today,20x Maggi packs
+Mahesh Babu,Tata Salt,Credit,50,Today,2x Salt packs
+Anita Sharma,Tata Salt,Credit,75,Yesterday,3x Tata Salt packets
+Anita Sharma,Maggi Noodles,Credit,140,Yesterday,10x Maggi packs
+Sneha Verma,Sunflower Oil,Credit,1800,Yesterday,10L Oil bulk
+Kavitha Rao,None,Payment,150,Yesterday,Full settlement
+Priya Patel,None,Payment,500,2 days ago,Cash payment
+Lakshmi Devi,Tea Powder,Credit,700,2 days ago,2x Tea Powder
+Ramesh Gupta,Sunflower Oil,Credit,360,2 days ago,2L Sunflower Oil
+Rajesh Kumar,Aashirvaad Atta,Credit,500,2 days ago,2x Atta bags
+Suresh Yadav,None,Payment,800,3 days ago,Cash partial payment
+Priya Patel,Toor Dal,Credit,480,3 days ago,3kg Toor Dal
+Mahesh Babu,Parle-G Biscuits,Credit,100,3 days ago,20x Parle-G
+Lakshmi Devi,None,Payment,300,4 days ago,UPI Payment
+Ramesh Gupta,Detergent Powder,Credit,240,4 days ago,2x Detergent
+Anita Sharma,None,Payment,200,4 days ago,Cash payment
+Sneha Verma,Rice Bags,Credit,1200,5 days ago,1x Rice Bag
+Arjun Reddy,None,Payment,100,5 days ago,Token payment
+Rajesh Kumar,Parle-G Biscuits,Credit,50,6 days ago,10x Parle-G
+Suresh Yadav,Sugar,Credit,270,6 days ago,6kg Sugar
+Priya Patel,None,Payment,1500,6 days ago,Monthly settlement

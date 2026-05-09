@@ -1,7 +1,11 @@
-name,phone,openingBalance
-Rajesh Kumar,+91 98765 43210,2500
-Suresh Yadav,+91 87654 32109,1800
-Anita Sharma,+91 76543 21098,0
-Priya Patel,+91 65432 10987,3200
-Lakshmi Devi,+91 94321 09876,500
-Ramesh Gupta,+91 83210 98765,1200
+Name,Phone,OpeningBalance,CreatedAt
+Rajesh Kumar,+91 98765 43210,2500,30 days ago
+Suresh Yadav,+91 87654 32109,1800,25 days ago
+Anita Sharma,+91 76543 21098,0,20 days ago
+Priya Patel,+91 65432 10987,3200,15 days ago
+Lakshmi Devi,+91 94321 09876,500,10 days ago
+Ramesh Gupta,+91 83210 98765,1200,7 days ago
+Arjun Reddy,+91 99887 76655,0,6 days ago
+Sneha Verma,+91 91234 56789,4500,5 days ago
+Kavitha Rao,+91 88990 01122,150,4 days ago
+Mahesh Babu,+91 77665 54433,0,3 days ago

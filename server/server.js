@@ -15,8 +15,31 @@ dotenv.config();
 connectDB();
 
 const app = express();
-app.use(cors());
+
+// --- CORS Configuration ---
+const allowedOrigins = [
+    'http://localhost:5173',
+    'https://merchant-khata.netlify.app', // Example Netlify URL - replace with your actual Netlify URL
+    process.env.FRONTEND_URL
+].filter(Boolean);
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1 && !allowedOrigins.includes('*')) {
+            var msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
+    credentials: true
+}));
+
 app.use(express.json());
+
+// Health Check for Render
+app.get('/', (req, res) => res.send('MerchantIQ Backend is Running...'));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'secret123';
 

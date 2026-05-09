@@ -1,4 +1,4 @@
-name,category,stockQuantity,unitPrice,productCode
+Name,Category,Stock,Price,Code
 Aashirvaad Atta,Groceries,50,250,P001
 Tata Salt,Groceries,100,25,P002
 Sugar,Groceries,8,45,P003
