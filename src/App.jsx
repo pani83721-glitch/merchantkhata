@@ -3,6 +3,7 @@ import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useStore } from './store';
 
 // --- Helpers ---
@@ -230,60 +231,112 @@ const Login = () => {
 
 // --- Pages ---
 
-const Dashboard = ({ customers, transactions, getCustomerMetrics }) => {
-    const todayStr = new Date().toDateString();
-    const todaysTransactions = transactions.filter(t => new Date(t.date).toDateString() === todayStr);
-    const dailyPayments = todaysTransactions.filter(t => t.type === 'Payment').reduce((sum, t) => sum + Number(t.amount), 0);
-    const todaysOrdersCount = todaysTransactions.length;
+const Dashboard = ({ customers, transactions, products, getCustomerMetrics }) => {
+    const [dateFilter, setDateFilter] = useState('today');
+
+    const getFilterDate = () => {
+        const d = new Date();
+        if (dateFilter === 'yesterday') { d.setDate(d.getDate() - 1); }
+        if (dateFilter === 'week') { d.setDate(d.getDate() - 7); return d; }
+        d.setHours(0, 0, 0, 0);
+        return d;
+    };
+
+    const filterTx = (txList) => {
+        if (dateFilter === 'week') {
+            const start = getFilterDate();
+            return txList.filter(t => new Date(t.date) >= start);
+        }
+        const targetStr = getFilterDate().toDateString();
+        return txList.filter(t => new Date(t.date).toDateString() === targetStr);
+    };
+
+    const filteredTx = filterTx(transactions);
+    const filteredPayments = filteredTx.filter(t => t.type === 'Payment').reduce((s, t) => s + Number(t.amount), 0);
+    const filteredCredits = filteredTx.filter(t => t.type === 'Credit').reduce((s, t) => s + Number(t.amount), 0);
+    const filteredCount = filteredTx.length;
 
     let totalPendingCredits = 0;
+    let pendingCustomerCount = 0;
     customers.forEach(c => {
-        const metrics = getCustomerMetrics(c._id);
-        if (metrics.runningBalance > 0) {
-            totalPendingCredits += metrics.runningBalance;
+        const m = getCustomerMetrics(c._id);
+        if (m.runningBalance > 0) { totalPendingCredits += m.runningBalance; pendingCustomerCount++; }
+    });
+
+    const totalInv = products.reduce((s, p) => s + (p.stockQuantity * p.unitPrice), 0);
+    const lowStockProducts = products.filter(p => p.stockQuantity < 20);
+
+    // Build 7-day chart data
+    const chartData = [];
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0,0,0,0);
+        const dayStr = d.toDateString();
+        const dayTx = transactions.filter(t => new Date(t.date).toDateString() === dayStr);
+        const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+        chartData.push({
+            name: label,
+            Sales: dayTx.filter(t => t.type === 'Payment').reduce((s, t) => s + Number(t.amount), 0),
+            Credits: dayTx.filter(t => t.type === 'Credit').reduce((s, t) => s + Number(t.amount), 0),
+            Transactions: dayTx.length
+        });
+    }
+
+    // Top selling: count product appearances in Credit transactions
+    const productSales = {};
+    transactions.filter(t => t.type === 'Credit').forEach(t => {
+        if (t.items?.length > 0 && t.items[0].productId) {
+            const pName = typeof t.items[0].productId === 'object' ? t.items[0].productId.name : 'Unknown';
+            productSales[pName] = (productSales[pName] || 0) + Number(t.amount);
         }
     });
+    const topProducts = Object.entries(productSales).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const topTotal = topProducts.reduce((s, [, v]) => s + v, 0);
+
+    const recentTx = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 8);
+
+    const filterLabel = dateFilter === 'today' ? "Today" : dateFilter === 'yesterday' ? "Yesterday" : "Last 7 Days";
 
     return (
         <div className="animate-fade-in">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-md mb-lg">
                 <div>
                     <h2 className="font-headline-lg text-headline-lg text-primary">Overview</h2>
-                    <p className="text-on-surface-variant font-body-md">Welcome back. Here's what's happening today.</p>
+                    <p className="text-on-surface-variant font-body-md">Welcome back. Here's what's happening — {filterLabel}.</p>
+                </div>
+                <div className="flex gap-sm">
+                    {['today', 'yesterday', 'week'].map(f => (
+                        <button key={f} onClick={() => setDateFilter(f)} className={`px-md py-xs rounded-lg text-label-md font-bold transition-all duration-300 ${dateFilter === f ? 'bg-primary text-on-primary shadow-sm' : 'bg-surface-container-low text-on-surface-variant border border-outline-variant hover:bg-surface-container-high'}`}>
+                            {f === 'today' ? 'Today' : f === 'yesterday' ? 'Yesterday' : 'Last 7 Days'}
+                        </button>
+                    ))}
                 </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-lg mb-xl">
                 <div className="bg-white p-lg rounded-2xl card-shadow border border-outline-variant/30 flex flex-col justify-between min-h-[140px] transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
                     <div className="flex justify-between items-start">
-                        <div className="w-10 h-10 bg-primary-container/10 rounded-lg flex items-center justify-center text-primary">
-                            <span className="material-symbols-outlined fill-1">payments</span>
-                        </div>
-                        <span className="bg-green-100 text-green-700 px-sm py-xs rounded-full text-[10px] font-bold">Dynamic ↑</span>
+                        <div className="w-10 h-10 bg-primary-container/10 rounded-lg flex items-center justify-center text-primary"><span className="material-symbols-outlined fill-1">payments</span></div>
+                        <span className="bg-green-100 text-green-700 px-sm py-xs rounded-full text-[10px] font-bold">₹ {filterLabel}</span>
                     </div>
                     <div className="mt-md">
-                        <p className="text-on-surface-variant font-label-md">Payments Collected Today</p>
-                        <h3 className="font-display-lg text-headline-lg text-on-surface">{formatInr(dailyPayments)}</h3>
+                        <p className="text-on-surface-variant font-label-md">Payments Collected</p>
+                        <h3 className="font-display-lg text-headline-lg text-on-surface">{formatInr(filteredPayments)}</h3>
                     </div>
                 </div>
                 <div className="bg-white p-lg rounded-2xl card-shadow border border-outline-variant/30 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
                     <div className="flex justify-between items-start">
-                        <div className="w-10 h-10 bg-secondary-fixed/30 rounded-lg flex items-center justify-center text-secondary">
-                            <span className="material-symbols-outlined fill-1">shopping_cart</span>
-                        </div>
-                        <span className="bg-green-100 text-green-700 px-sm py-xs rounded-full text-[10px] font-bold">Live ↑</span>
+                        <div className="w-10 h-10 bg-secondary-fixed/30 rounded-lg flex items-center justify-center text-secondary"><span className="material-symbols-outlined fill-1">shopping_cart</span></div>
+                        <span className="bg-green-100 text-green-700 px-sm py-xs rounded-full text-[10px] font-bold">Live</span>
                     </div>
                     <div className="mt-md">
-                        <p className="text-on-surface-variant font-label-md">Transactions Today</p>
-                        <h3 className="font-display-lg text-headline-lg text-on-surface">{todaysOrdersCount}</h3>
+                        <p className="text-on-surface-variant font-label-md">Transactions ({filterLabel})</p>
+                        <h3 className="font-display-lg text-headline-lg text-on-surface">{filteredCount}</h3>
                     </div>
                 </div>
                 <div className="bg-white p-lg rounded-2xl card-shadow border border-outline-variant/30 flex flex-col justify-between transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
                     <div className="flex justify-between items-start">
-                        <div className="w-10 h-10 bg-tertiary-container/10 rounded-lg flex items-center justify-center text-tertiary">
-                            <span className="material-symbols-outlined fill-1">account_balance_wallet</span>
-                        </div>
-                        <span className="bg-yellow-100 text-yellow-700 px-sm py-xs rounded-full text-[10px] font-bold">Pending</span>
+                        <div className="w-10 h-10 bg-tertiary-container/10 rounded-lg flex items-center justify-center text-tertiary"><span className="material-symbols-outlined fill-1">account_balance_wallet</span></div>
+                        <span className="bg-yellow-100 text-yellow-700 px-sm py-xs rounded-full text-[10px] font-bold">{pendingCustomerCount} users</span>
                     </div>
                     <div className="mt-md">
                         <p className="text-on-surface-variant font-label-md">Total Pending Credits</p>
@@ -292,9 +345,7 @@ const Dashboard = ({ customers, transactions, getCustomerMetrics }) => {
                 </div>
                 <div className="bg-primary p-lg rounded-2xl card-shadow border-none flex flex-col justify-between text-on-primary transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
                     <div className="flex justify-between items-start">
-                        <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center text-white">
-                            <span className="material-symbols-outlined fill-1">star</span>
-                        </div>
+                        <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center text-white"><span className="material-symbols-outlined fill-1">star</span></div>
                     </div>
                     <div className="mt-md">
                         <p className="text-white/70 font-label-md">Total Customers</p>
@@ -304,16 +355,130 @@ const Dashboard = ({ customers, transactions, getCustomerMetrics }) => {
                 </div>
             </div>
 
+            {/* Today's Summary */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-md mb-xl">
+                {[
+                    { label: 'Credits Given', value: formatInr(filteredCredits), icon: 'trending_up', color: 'text-error' },
+                    { label: 'Payments In', value: formatInr(filteredPayments), icon: 'trending_down', color: 'text-green-700' },
+                    { label: 'Inventory Value', value: formatInr(totalInv), icon: 'inventory_2', color: 'text-primary' },
+                    { label: 'Low Stock Items', value: lowStockProducts.length, icon: 'warning', color: 'text-yellow-600' },
+                ].map((item, i) => (
+                    <div key={i} className="bg-white p-md rounded-xl border border-outline-variant/30 card-shadow flex items-center gap-md transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
+                        <div className="w-10 h-10 bg-surface-container-low rounded-lg flex items-center justify-center"><span className={`material-symbols-outlined ${item.color}`}>{item.icon}</span></div>
+                        <div><p className="text-[11px] text-on-surface-variant uppercase tracking-wider">{item.label}</p><p className={`font-bold text-lg ${item.color}`}>{item.value}</p></div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Sales Analytics Chart */}
             <div className="bg-white p-xl rounded-2xl card-shadow border border-outline-variant/30 mb-xl transition-all duration-300 hover:shadow-lg">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-md mb-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-md mb-lg">
                     <div>
                         <h3 className="font-headline-md text-headline-md text-on-surface">Sales Analytics</h3>
-                        <p className="text-on-surface-variant font-body-md">Performance track over the last 7 days</p>
+                        <p className="text-on-surface-variant font-body-md">Performance over the last 7 days</p>
                     </div>
                 </div>
-                <div className="relative h-[300px] w-full bg-surface-container-lowest rounded-xl flex items-center justify-center">
-                    <p className="text-on-surface-variant">Live charts integrating backend data...</p>
+                <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#c5c5d3" />
+                            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                            <YAxis tick={{ fontSize: 12 }} />
+                            <Tooltip formatter={(v) => formatInr(v)} contentStyle={{ borderRadius: '12px', border: '1px solid #c5c5d3' }} />
+                            <Legend />
+                            <Bar dataKey="Sales" fill="#22c55e" radius={[6, 6, 0, 0]} />
+                            <Bar dataKey="Credits" fill="#ba1a1a" radius={[6, 6, 0, 0]} />
+                        </BarChart>
+                    </ResponsiveContainer>
                 </div>
+            </div>
+
+            <div className="grid grid-cols-12 gap-lg mb-xl">
+                {/* Low Stock Alerts */}
+                <div className="col-span-12 lg:col-span-4">
+                    <div className="bg-white p-lg rounded-xl border border-outline-variant/30 card-shadow h-full">
+                        <h3 className="font-headline-sm text-on-surface mb-md flex items-center gap-sm"><span className="material-symbols-outlined text-yellow-600 fill-1">warning</span>Low Stock Alerts</h3>
+                        <div className="space-y-sm">
+                            {lowStockProducts.length === 0 && <p className="text-on-surface-variant text-sm">All products well stocked!</p>}
+                            {lowStockProducts.map(p => (
+                                <div key={p._id} className="flex items-center justify-between p-sm bg-yellow-100/50 border border-yellow-200 rounded-lg">
+                                    <div><p className="font-bold text-on-surface">{p.name}</p><p className="text-[11px] text-on-surface-variant">{p.category}</p></div>
+                                    <span className="bg-error text-white px-sm py-xs rounded-full text-[10px] font-bold">{p.stockQuantity} left</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Top Selling Products */}
+                <div className="col-span-12 lg:col-span-4">
+                    <div className="bg-white p-lg rounded-xl border border-outline-variant/30 card-shadow h-full">
+                        <h3 className="font-headline-sm text-on-surface mb-md flex items-center gap-sm"><span className="material-symbols-outlined text-primary fill-1">trending_up</span>Top Selling Products</h3>
+                        <div className="space-y-sm">
+                            {topProducts.length === 0 && <p className="text-on-surface-variant text-sm">No sales data yet.</p>}
+                            {topProducts.map(([name, amount], i) => (
+                                <div key={name} className="flex items-center justify-between p-sm bg-surface-container-low rounded-lg">
+                                    <div className="flex items-center gap-sm"><span className="w-6 h-6 bg-primary-container text-on-primary-container rounded-full flex items-center justify-center text-[11px] font-bold">{i + 1}</span><p className="font-bold text-on-surface">{name}</p></div>
+                                    <div className="text-right"><p className="font-bold text-primary">{formatInr(amount)}</p><p className="text-[10px] text-on-surface-variant">{topTotal > 0 ? Math.round((amount / topTotal) * 100) : 0}%</p></div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Recent Customers */}
+                <div className="col-span-12 lg:col-span-4">
+                    <div className="bg-white p-lg rounded-xl border border-outline-variant/30 card-shadow h-full">
+                        <h3 className="font-headline-sm text-on-surface mb-md flex items-center gap-sm"><span className="material-symbols-outlined text-secondary fill-1">group</span>Recent Customers</h3>
+                        <div className="space-y-sm">
+                            {customers.slice(0, 5).map(c => {
+                                const m = getCustomerMetrics(c._id);
+                                return (
+                                    <div key={c._id} className="flex items-center justify-between p-sm bg-surface-container-low rounded-lg">
+                                        <div className="flex items-center gap-sm">
+                                            <div className="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-sm">{c.name.charAt(0)}</div>
+                                            <p className="font-bold text-on-surface">{c.name}</p>
+                                        </div>
+                                        <span className={`font-bold text-sm ${m.runningBalance > 0 ? 'text-error' : 'text-green-700'}`}>{formatInr(m.runningBalance)}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Recent Transactions Table */}
+            <div className="bg-white rounded-xl border border-outline-variant/30 card-shadow overflow-x-auto transition-all duration-300 hover:shadow-lg">
+                <div className="p-lg border-b border-outline-variant">
+                    <h3 className="font-headline-sm text-on-surface">Recent Transactions</h3>
+                </div>
+                <table className="w-full text-left min-w-[700px]">
+                    <thead className="bg-surface-container-low border-b border-outline-variant">
+                        <tr>
+                            <th className="px-lg py-md text-outline font-label-md uppercase">Customer</th>
+                            <th className="px-lg py-md text-outline font-label-md uppercase">Product</th>
+                            <th className="px-lg py-md text-outline font-label-md uppercase">Type</th>
+                            <th className="px-lg py-md text-outline font-label-md uppercase text-right">Amount</th>
+                            <th className="px-lg py-md text-outline font-label-md uppercase text-right">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline-variant">
+                        {recentTx.map(t => {
+                            const cust = customers.find(c => c._id === (t.customerId?._id || t.customerId));
+                            const prodName = t.items?.length > 0 && t.items[0].productId ? (typeof t.items[0].productId === 'object' ? t.items[0].productId.name : '-') : '-';
+                            return (
+                                <tr key={t._id} className="hover:bg-surface-container-low transition-colors">
+                                    <td className="px-lg py-md font-bold">{cust?.name || 'Unknown'}</td>
+                                    <td className="px-lg py-md text-on-surface-variant">{prodName}</td>
+                                    <td className="px-lg py-md"><span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${t.type === 'Credit' ? 'bg-error-container text-on-error-container' : 'bg-green-100 text-green-800'}`}>{t.type}</span></td>
+                                    <td className={`px-lg py-md text-right font-bold ${t.type === 'Credit' ? 'text-error' : 'text-green-700'}`}>{t.type === 'Credit' ? '+' : '-'}{formatInr(t.amount)}</td>
+                                    <td className="px-lg py-md text-right text-on-surface-variant text-sm">{formatDate(t.date)}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
             </div>
         </div>
     );
@@ -655,29 +820,138 @@ const Customers = ({ customers, transactions, products, getCustomerMetrics, fetc
     );
 };
 
-const Reports = ({ customers, transactions, products }) => {
+const Reports = ({ customers, transactions, products, getCustomerMetrics }) => {
     const [activeSection, setActiveSection] = useState(null);
+
+    const totalCredits = transactions.filter(t => t.type === 'Credit').reduce((s, t) => s + Number(t.amount), 0);
+    const totalPayments = transactions.filter(t => t.type === 'Payment').reduce((s, t) => s + Number(t.amount), 0);
+    const totalInv = products.reduce((s, p) => s + (p.stockQuantity * p.unitPrice), 0);
+    const lowStock = products.filter(p => p.stockQuantity < 20);
 
     const generatePDF = () => {
         const doc = new jsPDF();
-        doc.setFontSize(20);
-        doc.text("MerchantIQ Business Report", 14, 22);
-        doc.setFontSize(11);
-        doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30);
+        const primaryColor = [36, 56, 140];
 
+        // Header
+        doc.setFillColor(...primaryColor);
+        doc.rect(0, 0, 210, 35, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(22);
+        doc.text("MerchantIQ Business Report", 14, 18);
+        doc.setFontSize(10);
+        doc.text(`Gorakshaknath Merchants | Generated: ${new Date().toLocaleString('en-IN')}`, 14, 28);
+        doc.setTextColor(0, 0, 0);
+
+        // Dashboard Summary
+        doc.setFontSize(14);
+        doc.text("Dashboard Summary", 14, 45);
         doc.autoTable({
-            startY: 40,
-            head: [['Metric', 'Value']],
+            startY: 50, head: [['Metric', 'Value']],
             body: [
-                ['Total Customers', customers.length],
-                ['Total Products', products.length],
-                ['Total Transactions', transactions.length],
+                ['Total Customers', customers.length.toString()],
+                ['Total Products', products.length.toString()],
+                ['Total Transactions', transactions.length.toString()],
+                ['Total Credits Given', formatInr(totalCredits)],
+                ['Total Payments Collected', formatInr(totalPayments)],
+                ['Pending Dues', formatInr(totalCredits - totalPayments)],
+                ['Inventory Value', formatInr(totalInv)],
+                ['Low Stock Items', lowStock.length.toString()],
             ],
-            theme: 'grid',
-            headStyles: { fillColor: [36, 56, 140] }
+            theme: 'grid', headStyles: { fillColor: primaryColor }
         });
 
-        doc.save("merchantiq_report.pdf");
+        // Customer Balances
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.text("Customer Balances Report", 14, 20);
+        doc.autoTable({
+            startY: 26, head: [['Customer', 'Phone', 'Credit', 'Paid', 'Balance']],
+            body: customers.map(c => {
+                const m = getCustomerMetrics(c._id);
+                return [c.name, c.phone, formatInr(m.totalCredit), formatInr(m.totalPaid), formatInr(m.runningBalance)];
+            }),
+            theme: 'grid', headStyles: { fillColor: primaryColor }
+        });
+
+        // Inventory
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.text("Inventory Report", 14, 20);
+        doc.autoTable({
+            startY: 26, head: [['Product', 'Code', 'Category', 'Stock', 'Price', 'Value']],
+            body: products.map(p => [p.name, p.productCode, p.category, p.stockQuantity.toString(), formatInr(p.unitPrice), formatInr(p.stockQuantity * p.unitPrice)]),
+            theme: 'grid', headStyles: { fillColor: primaryColor }
+        });
+
+        // Transactions
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.text("Transaction History (Last 50)", 14, 20);
+        doc.autoTable({
+            startY: 26, head: [['Date', 'Customer', 'Type', 'Amount', 'Notes']],
+            body: transactions.slice(0, 50).map(t => {
+                const cust = customers.find(c => c._id === (t.customerId?._id || t.customerId));
+                return [formatDate(t.date), cust?.name || '-', t.type, formatInr(t.amount), t.notes || '-'];
+            }),
+            theme: 'grid', headStyles: { fillColor: primaryColor }
+        });
+
+        doc.save("merchantiq_full_report.pdf");
+    };
+
+    const renderSubReport = () => {
+        if (!activeSection) return null;
+        if (activeSection === 'Sales') {
+            const totalSales = totalPayments;
+            const todayTx = transactions.filter(t => new Date(t.date).toDateString() === new Date().toDateString());
+            return (
+                <div className="space-y-md">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-md">
+                        <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Total Revenue</p><p className="text-xl font-bold text-primary">{formatInr(totalSales)}</p></div>
+                        <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Today's Sales</p><p className="text-xl font-bold text-green-700">{formatInr(todayTx.filter(t => t.type === 'Payment').reduce((s, t) => s + Number(t.amount), 0))}</p></div>
+                        <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Total Transactions</p><p className="text-xl font-bold text-on-surface">{transactions.length}</p></div>
+                    </div>
+                </div>
+            );
+        }
+        if (activeSection === 'Inventory') {
+            return (
+                <div className="space-y-md">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-md mb-md">
+                        <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Inventory Value</p><p className="text-xl font-bold text-primary">{formatInr(totalInv)}</p></div>
+                        <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Total Products</p><p className="text-xl font-bold text-on-surface">{products.length}</p></div>
+                        <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Low Stock</p><p className="text-xl font-bold text-error">{lowStock.length} items</p></div>
+                    </div>
+                    <table className="w-full text-left"><thead className="bg-surface-container-low border-b border-outline-variant"><tr><th className="px-md py-sm text-outline text-sm uppercase">Product</th><th className="px-md py-sm text-outline text-sm uppercase text-center">Stock</th><th className="px-md py-sm text-outline text-sm uppercase text-right">Value</th></tr></thead>
+                    <tbody className="divide-y divide-outline-variant">{products.map(p => (<tr key={p._id} className="hover:bg-surface-container-low"><td className="px-md py-sm font-bold">{p.name}</td><td className={`px-md py-sm text-center font-bold ${p.stockQuantity < 20 ? 'text-error' : ''}`}>{p.stockQuantity}</td><td className="px-md py-sm text-right">{formatInr(p.stockQuantity * p.unitPrice)}</td></tr>))}</tbody></table>
+                </div>
+            );
+        }
+        if (activeSection === 'Customers') {
+            return (
+                <div className="space-y-md">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-md mb-md">
+                        <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Total Customers</p><p className="text-xl font-bold text-primary">{customers.length}</p></div>
+                        <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">With Pending Dues</p><p className="text-xl font-bold text-error">{customers.filter(c => getCustomerMetrics(c._id).runningBalance > 0).length}</p></div>
+                        <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Cleared</p><p className="text-xl font-bold text-green-700">{customers.filter(c => getCustomerMetrics(c._id).runningBalance <= 0).length}</p></div>
+                    </div>
+                    <table className="w-full text-left"><thead className="bg-surface-container-low border-b border-outline-variant"><tr><th className="px-md py-sm text-outline text-sm uppercase">Name</th><th className="px-md py-sm text-outline text-sm uppercase">Phone</th><th className="px-md py-sm text-outline text-sm uppercase text-right">Balance</th></tr></thead>
+                    <tbody className="divide-y divide-outline-variant">{customers.map(c => { const m = getCustomerMetrics(c._id); return (<tr key={c._id} className="hover:bg-surface-container-low"><td className="px-md py-sm font-bold">{c.name}</td><td className="px-md py-sm text-on-surface-variant">{c.phone}</td><td className={`px-md py-sm text-right font-bold ${m.runningBalance > 0 ? 'text-error' : 'text-green-700'}`}>{formatInr(m.runningBalance)}</td></tr>); })}</tbody></table>
+                </div>
+            );
+        }
+        if (activeSection === 'Financials') {
+            return (
+                <div className="space-y-md">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-md">
+                        <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Total Credits</p><p className="text-xl font-bold text-error">{formatInr(totalCredits)}</p></div>
+                        <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Payments Collected</p><p className="text-xl font-bold text-green-700">{formatInr(totalPayments)}</p></div>
+                        <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Pending Dues</p><p className="text-xl font-bold text-yellow-600">{formatInr(totalCredits - totalPayments)}</p></div>
+                        <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Recovery Rate</p><p className="text-xl font-bold text-primary">{totalCredits > 0 ? Math.round((totalPayments / totalCredits) * 100) : 0}%</p></div>
+                    </div>
+                </div>
+            );
+        }
     };
 
     return (
@@ -693,7 +967,7 @@ const Reports = ({ customers, transactions, products }) => {
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-lg mb-xl">
                 {['Sales', 'Inventory', 'Customers', 'Financials'].map((cat, i) => (
-                    <div key={cat} onClick={() => setActiveSection(cat)} className={`p-md rounded-xl border transition-all duration-300 cursor-pointer group hover:-translate-y-1 ${activeSection === cat ? 'bg-primary border-primary shadow-lg' : 'bg-surface-container-low border-outline-variant hover:border-primary hover:shadow-md'}`}>
+                    <div key={cat} onClick={() => setActiveSection(activeSection === cat ? null : cat)} className={`p-md rounded-xl border transition-all duration-300 cursor-pointer group hover:-translate-y-1 ${activeSection === cat ? 'bg-primary border-primary shadow-lg' : 'bg-surface-container-low border-outline-variant hover:border-primary hover:shadow-md'}`}>
                         <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-md transition-colors duration-300 shadow-sm ${activeSection === cat ? 'bg-white text-primary' : 'bg-surface text-primary group-hover:bg-primary group-hover:text-white'}`}>
                             <span className="material-symbols-outlined">{['payments', 'inventory', 'person_add', 'account_balance'][i]}</span>
                         </div>
@@ -705,11 +979,8 @@ const Reports = ({ customers, transactions, products }) => {
             <AnimatePresence mode="wait">
                 {activeSection && (
                     <motion.div key={activeSection} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="bg-white border border-outline-variant rounded-xl p-xl shadow-lg">
-                        <h3 className="text-xl font-bold text-primary mb-md">{activeSection} Detailed Report</h3>
-                        <p className="text-on-surface-variant">Live metrics loaded from MongoDB via Express Backend.</p>
-                        {activeSection === 'Sales' && <div className="mt-md"><p>Total Transactions Logged: {transactions.length}</p></div>}
-                        {activeSection === 'Inventory' && <div className="mt-md"><p>Products Tracked: {products.length}</p></div>}
-                        {activeSection === 'Customers' && <div className="mt-md"><p>Total Customer Base: {customers.length}</p></div>}
+                        <h3 className="text-xl font-bold text-primary mb-lg">{activeSection} Detailed Report</h3>
+                        {renderSubReport()}
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -718,7 +989,7 @@ const Reports = ({ customers, transactions, products }) => {
 };
 
 const Settings = () => {
-    const { theme, toggleTheme } = useStore();
+    const { theme, setTheme } = useStore();
     return (
         <div className="animate-fade-in pb-20">
             <div className="flex flex-col gap-xs mb-xl">
@@ -727,16 +998,67 @@ const Settings = () => {
             </div>
             <div className="grid grid-cols-12 gap-lg">
                 <div className="col-span-12 lg:col-span-8 flex flex-col gap-lg">
+                    {/* Theme */}
                     <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-lg shadow-sm">
-                        <div className="flex items-center gap-md mb-xl">
+                        <div className="flex items-center gap-md mb-lg">
                             <span className="material-symbols-outlined text-primary bg-primary-fixed p-sm rounded-lg shadow-sm">palette</span>
                             <h2 className="font-headline-sm">Theme Preferences</h2>
                         </div>
-                        <div className="flex items-center justify-between p-md bg-surface-container-low rounded-lg">
-                            <div><p className="font-bold text-on-surface">Dark Mode</p><p className="text-body-sm text-on-surface-variant">Switch between light and dark UI themes.</p></div>
-                            <button onClick={toggleTheme} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${theme === 'dark' ? 'bg-primary' : 'bg-outline'}`}>
-                                <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${theme === 'dark' ? 'translate-x-6' : 'translate-x-1'}`} />
+                        <div className="flex gap-md">
+                            <button onClick={() => setTheme('light')} className={`flex-1 p-md rounded-xl border-2 transition-all ${theme === 'light' ? 'border-primary bg-primary-fixed/20 shadow-md' : 'border-outline-variant hover:border-primary'}`}>
+                                <span className="material-symbols-outlined text-yellow-500 mb-sm">light_mode</span>
+                                <p className="font-bold">Light Mode</p>
+                                <p className="text-[11px] text-on-surface-variant">Clean, bright interface</p>
                             </button>
+                            <button onClick={() => setTheme('dark')} className={`flex-1 p-md rounded-xl border-2 transition-all ${theme === 'dark' ? 'border-primary bg-primary-fixed/20 shadow-md' : 'border-outline-variant hover:border-primary'}`}>
+                                <span className="material-symbols-outlined text-indigo-400 mb-sm">dark_mode</span>
+                                <p className="font-bold">Dark Mode</p>
+                                <p className="text-[11px] text-on-surface-variant">Easy on the eyes</p>
+                            </button>
+                        </div>
+                    </section>
+
+                    {/* Profile */}
+                    <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-lg shadow-sm">
+                        <div className="flex items-center gap-md mb-lg">
+                            <span className="material-symbols-outlined text-primary bg-primary-fixed p-sm rounded-lg shadow-sm">person</span>
+                            <h2 className="font-headline-sm">Profile Settings</h2>
+                        </div>
+                        <div className="space-y-md">
+                            <div className="flex items-center gap-md p-md bg-surface-container-low rounded-lg">
+                                <img alt="Profile" className="w-14 h-14 rounded-full object-cover" src="https://images.unsplash.com/photo-1556157382-97eda2d62296?auto=format&fit=crop&w=150&q=80" />
+                                <div><p className="font-bold text-on-surface">Gorakshaknath</p><p className="text-body-sm text-on-surface-variant">Merchant / Store Owner</p><p className="text-[11px] text-outline">contact@gorakshaknathmerchants.in</p></div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Store Information */}
+                    <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-lg shadow-sm">
+                        <div className="flex items-center gap-md mb-lg">
+                            <span className="material-symbols-outlined text-primary bg-primary-fixed p-sm rounded-lg shadow-sm">store</span>
+                            <h2 className="font-headline-sm">Store Information</h2>
+                        </div>
+                        <div className="grid grid-cols-2 gap-md">
+                            <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Store Name</p><p className="font-bold">Gorakshaknath General Store</p></div>
+                            <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Location</p><p className="font-bold">Maharashtra, India</p></div>
+                            <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">GST Number</p><p className="font-bold">27AABCG1234F1ZH</p></div>
+                            <div className="p-md bg-surface-container-low rounded-lg"><p className="text-[11px] text-on-surface-variant uppercase">Contact</p><p className="font-bold">+91 98765 43210</p></div>
+                        </div>
+                    </section>
+
+                    {/* Export Preferences */}
+                    <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-lg shadow-sm">
+                        <div className="flex items-center gap-md mb-lg">
+                            <span className="material-symbols-outlined text-primary bg-primary-fixed p-sm rounded-lg shadow-sm">download</span>
+                            <h2 className="font-headline-sm">Data Export Preferences</h2>
+                        </div>
+                        <div className="space-y-sm">
+                            {['Include Customer Balances in PDF', 'Include Inventory Data in PDF', 'Include Transaction History in PDF'].map((label, i) => (
+                                <div key={i} className="flex items-center justify-between p-md bg-surface-container-low rounded-lg">
+                                    <p className="font-bold text-on-surface">{label}</p>
+                                    <div className="w-11 h-6 bg-primary rounded-full flex items-center px-1"><span className="w-4 h-4 bg-white rounded-full ml-auto" /></div>
+                                </div>
+                            ))}
                         </div>
                     </section>
                 </div>
@@ -802,12 +1124,12 @@ const App = () => {
 
     const renderPage = () => {
         switch(activePage) {
-            case 'dashboard': return <Dashboard customers={customers} transactions={transactions} getCustomerMetrics={getCustomerMetrics} />;
+            case 'dashboard': return <Dashboard customers={customers} transactions={transactions} products={products} getCustomerMetrics={getCustomerMetrics} />;
             case 'products': return <Products products={products} fetchData={fetchData} />;
             case 'customers': return <Customers customers={customers} transactions={transactions} products={products} getCustomerMetrics={getCustomerMetrics} fetchData={fetchData} />;
-            case 'reports': return <Reports customers={customers} transactions={transactions} products={products} />;
+            case 'reports': return <Reports customers={customers} transactions={transactions} products={products} getCustomerMetrics={getCustomerMetrics} />;
             case 'settings': return <Settings />;
-            default: return <Dashboard customers={customers} transactions={transactions} getCustomerMetrics={getCustomerMetrics} />;
+            default: return <Dashboard customers={customers} transactions={transactions} products={products} getCustomerMetrics={getCustomerMetrics} />;
         }
     };
 

@@ -1,9 +1,13 @@
 import { create } from 'zustand';
 
 export const useStore = create((set) => ({
-    theme: 'light',
-    toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
-    setTheme: (theme) => set({ theme }),
+    theme: localStorage.getItem('merchantiq_theme') || 'light',
+    toggleTheme: () => set((state) => {
+        const next = state.theme === 'light' ? 'dark' : 'light';
+        localStorage.setItem('merchantiq_theme', next);
+        return { theme: next };
+    }),
+    setTheme: (theme) => { localStorage.setItem('merchantiq_theme', theme); set({ theme }); },
 
     user: null,
     token: localStorage.getItem('merchantiq_token') || null,
