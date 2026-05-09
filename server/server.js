@@ -18,11 +18,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const JWT_SECRET = process.env.JWT_SECRET || 'secret123';
+
 const authMiddleware = (req, res, next) => {
     const token = req.header('Authorization');
     if (!token) return res.status(401).json({ msg: 'No token, authorization denied' });
     try {
-        const decoded = jwt.verify(token.replace('Bearer ', ''), process.env.JWT_SECRET || 'secret123');
+        const decoded = jwt.verify(token.replace('Bearer ', ''), JWT_SECRET);
         req.user = decoded.user;
         next();
     } catch (err) {
@@ -39,7 +41,30 @@ app.post('/api/auth/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ msg: 'Invalid Credentials' });
         const payload = { user: { id: user.id } };
-        jwt.sign(payload, process.env.JWT_SECRET || 'secret123', { expiresIn: '5 days' }, (err, token) => {
+        jwt.sign(payload, JWT_SECRET, { expiresIn: '5 days' }, (err, token) => {
+            if (err) throw err;
+            res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+        });
+    } catch (err) {
+        res.status(500).send('Server error');
+    }
+});
+
+app.post('/api/auth/register', async (req, res) => {
+    try {
+        const { name, email, password, storeName } = req.body;
+        let existing = await User.findOne({ email });
+        if (existing) return res.status(400).json({ msg: 'A merchant with this email already exists' });
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+        const user = await User.create({
+            name,
+            email,
+            password: hashedPassword,
+            role: storeName ? `Owner - ${storeName}` : 'Merchant / Store Owner'
+        });
+        const payload = { user: { id: user.id } };
+        jwt.sign(payload, JWT_SECRET, { expiresIn: '5 days' }, (err, token) => {
             if (err) throw err;
             res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
         });
@@ -57,15 +82,15 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
     }
 });
 
-// --- PRODUCTS ---
-app.get('/api/products', async (req, res) => {
-    const products = await Product.find().sort({ createdAt: -1 });
+// --- PRODUCTS (user-isolated) ---
+app.get('/api/products', authMiddleware, async (req, res) => {
+    const products = await Product.find({ userId: req.user.id }).sort({ createdAt: -1 });
     res.json(products);
 });
 
-app.post('/api/products', async (req, res) => {
+app.post('/api/products', authMiddleware, async (req, res) => {
     try {
-        const newProduct = new Product(req.body);
+        const newProduct = new Product({ ...req.body, userId: req.user.id });
         const product = await newProduct.save();
         res.json(product);
     } catch (err) {
@@ -73,15 +98,15 @@ app.post('/api/products', async (req, res) => {
     }
 });
 
-// --- CUSTOMERS ---
-app.get('/api/customers', async (req, res) => {
-    const customers = await Customer.find().sort({ createdAt: -1 });
+// --- CUSTOMERS (user-isolated) ---
+app.get('/api/customers', authMiddleware, async (req, res) => {
+    const customers = await Customer.find({ userId: req.user.id }).sort({ createdAt: -1 });
     res.json(customers);
 });
 
-app.post('/api/customers', async (req, res) => {
+app.post('/api/customers', authMiddleware, async (req, res) => {
     try {
-        const newCustomer = new Customer(req.body);
+        const newCustomer = new Customer({ ...req.body, userId: req.user.id });
         const customer = await newCustomer.save();
         res.json(customer);
     } catch (err) {
@@ -89,16 +114,16 @@ app.post('/api/customers', async (req, res) => {
     }
 });
 
-// --- TRANSACTIONS ---
-app.get('/api/transactions', async (req, res) => {
-    const transactions = await Transaction.find().populate('customerId').populate('items.productId').sort({ date: -1 });
+// --- TRANSACTIONS (user-isolated) ---
+app.get('/api/transactions', authMiddleware, async (req, res) => {
+    const transactions = await Transaction.find({ userId: req.user.id }).populate('customerId').populate('items.productId').sort({ date: -1 });
     res.json(transactions);
 });
 
-app.post('/api/transactions', async (req, res) => {
+app.post('/api/transactions', authMiddleware, async (req, res) => {
     try {
         const { customerId, type, amount, notes, items, date } = req.body;
-        const newTransaction = new Transaction({ customerId, type, amount, notes, items, date });
+        const newTransaction = new Transaction({ userId: req.user.id, customerId, type, amount, notes, items, date });
         const transaction = await newTransaction.save();
 
         // Update product stock if items are present

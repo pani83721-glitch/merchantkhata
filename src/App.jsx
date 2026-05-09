@@ -161,28 +161,60 @@ const MainWrapper = ({ children, activePage, setActivePage, transactions, custom
     </div>
 );
 
-// --- Login Page ---
+// --- Login / Register Page ---
 const Login = () => {
     const { setUser } = useStore();
+    const [isRegister, setIsRegister] = useState(false);
     const [email, setEmail] = useState('contact@gorakshaknathmerchants.in');
     const [password, setPassword] = useState('password123');
+    const [name, setName] = useState('');
+    const [storeName, setStoreName] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const switchMode = (toRegister) => {
+        setIsRegister(toRegister);
+        setError('');
+        if (!toRegister) {
+            setEmail('contact@gorakshaknathmerchants.in');
+            setPassword('password123');
+        } else {
+            setEmail('');
+            setPassword('');
+        }
+    };
 
     const handleLogin = async (e) => {
         e.preventDefault();
+        setLoading(true); setError('');
         try {
             const res = await api.post('/auth/login', { email, password });
             setUser(res.data.user, res.data.token);
         } catch (err) {
-            setError('Invalid credentials or server not running.');
+            setError(err.response?.data?.msg || 'Invalid credentials or server not running.');
         }
+        setLoading(false);
+    };
+
+    const handleRegister = async (e) => {
+        e.preventDefault();
+        if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
+        if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+        setLoading(true); setError('');
+        try {
+            const res = await api.post('/auth/register', { name, email, password, storeName });
+            setUser(res.data.user, res.data.token);
+        } catch (err) {
+            setError(err.response?.data?.msg || 'Registration failed. Server may not be running.');
+        }
+        setLoading(false);
     };
 
     return (
         <div className="bg-background font-body-md text-on-background min-h-screen flex items-center justify-center p-md animate-fade-in" style={{
             backgroundImage: "linear-gradient(rgba(237, 244, 255, 0.8), rgba(237, 244, 255, 0.8)), url('https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=1920&q=80')",
-            backgroundSize: 'cover',
-            backgroundPosition: 'center'
+            backgroundSize: 'cover', backgroundPosition: 'center'
         }}>
             <main className="w-full max-w-[440px] z-10 animate-fade-in-up">
                 <div className="flex flex-col items-center mb-xl">
@@ -193,37 +225,83 @@ const Login = () => {
                     <p className="font-body-md text-on-surface-variant mt-xs">Digital Khata & Analytics</p>
                 </div>
 
-                <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0_20px_40px_-15px_rgba(4,31,118,0.08)] p-xl transition-all duration-300 hover:shadow-[0_25px_50px_-12px_rgba(4,31,118,0.12)]">
+                <AnimatePresence mode="wait">
+                <motion.div key={isRegister ? 'register' : 'login'} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.25 }}
+                    className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0_20px_40px_-15px_rgba(4,31,118,0.08)] p-xl">
                     <div className="mb-lg">
-                        <h2 className="font-headline-sm text-headline-sm text-on-surface">Welcome back</h2>
-                        <p className="font-body-sm text-on-surface-variant">Please enter your details to sign in</p>
-                        {error && <p className="text-error text-sm mt-2">{error}</p>}
+                        <h2 className="font-headline-sm text-headline-sm text-on-surface">{isRegister ? 'Create Merchant Account' : 'Welcome back'}</h2>
+                        <p className="font-body-sm text-on-surface-variant">{isRegister ? 'Register your store and start managing your khata' : 'Please enter your details to sign in'}</p>
+                        {error && <p className="text-error text-sm mt-sm p-sm bg-error-container rounded-lg">{error}</p>}
                     </div>
 
-                    <form className="space-y-lg" onSubmit={handleLogin}>
-                        <div className="space-y-sm">
-                            <label className="block font-body-sm font-bold text-on-surface" htmlFor="username">Email Address</label>
-                            <div className="relative">
-                                <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">mail</span>
-                                <input value={email} onChange={e=>setEmail(e.target.value)} className="w-full pl-[48px] pr-md py-md bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-container focus:border-transparent transition-all placeholder:text-outline" id="username" type="email" required />
+                    {!isRegister ? (
+                        <form className="space-y-lg" onSubmit={handleLogin}>
+                            <div className="space-y-sm">
+                                <label className="block font-body-sm font-bold text-on-surface">Email Address</label>
+                                <div className="relative">
+                                    <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">mail</span>
+                                    <input value={email} onChange={e=>setEmail(e.target.value)} className="w-full pl-[48px] pr-md py-md bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-container focus:border-transparent transition-all" type="email" required />
+                                </div>
                             </div>
-                        </div>
-
-                        <div className="space-y-sm">
-                            <div className="flex justify-between items-center">
-                                <label className="block font-body-sm font-bold text-on-surface" htmlFor="password">Password</label>
+                            <div className="space-y-sm">
+                                <label className="block font-body-sm font-bold text-on-surface">Password</label>
+                                <div className="relative">
+                                    <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">lock</span>
+                                    <input value={password} onChange={e=>setPassword(e.target.value)} className="w-full pl-[48px] pr-md py-md bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-container focus:border-transparent transition-all" type="password" required />
+                                </div>
                             </div>
-                            <div className="relative">
-                                <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">lock</span>
-                                <input value={password} onChange={e=>setPassword(e.target.value)} className="w-full pl-[48px] pr-md py-md bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-container focus:border-transparent transition-all placeholder:text-outline" id="password" type="password" required />
+                            <button disabled={loading} className="w-full bg-primary text-on-primary font-headline-sm py-md rounded-lg shadow-sm hover:opacity-90 active:scale-[0.98] transition-all duration-300 disabled:opacity-60" type="submit">
+                                {loading ? 'Signing In...' : 'Sign In'}
+                            </button>
+                            <p className="text-center text-body-sm text-on-surface-variant">
+                                New Merchant?{' '}
+                                <button type="button" onClick={() => switchMode(true)} className="text-primary font-bold hover:underline">Register here</button>
+                            </p>
+                        </form>
+                    ) : (
+                        <form className="space-y-md" onSubmit={handleRegister}>
+                            <div>
+                                <label className="block font-body-sm font-bold text-on-surface mb-xs">Your Full Name</label>
+                                <div className="relative">
+                                    <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">person</span>
+                                    <input value={name} onChange={e=>setName(e.target.value)} placeholder="Ramesh Kumar" className="w-full pl-[48px] pr-md py-md bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-container focus:border-transparent transition-all" type="text" required />
+                                </div>
                             </div>
-                        </div>
-
-                        <button className="w-full bg-primary-container text-on-primary font-headline-sm py-md rounded-lg shadow-sm hover:opacity-90 active:scale-[0.98] transition-all duration-300" type="submit">
-                            Sign In
-                        </button>
-                    </form>
-                </div>
+                            <div>
+                                <label className="block font-body-sm font-bold text-on-surface mb-xs">Store Name</label>
+                                <div className="relative">
+                                    <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">store</span>
+                                    <input value={storeName} onChange={e=>setStoreName(e.target.value)} placeholder="Ramesh General Store" className="w-full pl-[48px] pr-md py-md bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-container focus:border-transparent transition-all" type="text" required />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block font-body-sm font-bold text-on-surface mb-xs">Email Address</label>
+                                <div className="relative">
+                                    <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">mail</span>
+                                    <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@yourstore.com" className="w-full pl-[48px] pr-md py-md bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-container focus:border-transparent transition-all" type="email" required />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-sm">
+                                <div>
+                                    <label className="block font-body-sm font-bold text-on-surface mb-xs">Password</label>
+                                    <input value={password} onChange={e=>setPassword(e.target.value)} placeholder="Min 6 chars" className="w-full p-md bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-container focus:border-transparent transition-all" type="password" required />
+                                </div>
+                                <div>
+                                    <label className="block font-body-sm font-bold text-on-surface mb-xs">Confirm Password</label>
+                                    <input value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Repeat password" className="w-full p-md bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-container focus:border-transparent transition-all" type="password" required />
+                                </div>
+                            </div>
+                            <button disabled={loading} className="w-full bg-primary text-on-primary font-headline-sm py-md rounded-lg shadow-sm hover:opacity-90 active:scale-[0.98] transition-all duration-300 mt-sm disabled:opacity-60" type="submit">
+                                {loading ? 'Creating Account...' : 'Create Merchant Account'}
+                            </button>
+                            <p className="text-center text-body-sm text-on-surface-variant">
+                                Already have an account?{' '}
+                                <button type="button" onClick={() => switchMode(false)} className="text-primary font-bold hover:underline">Sign in here</button>
+                            </p>
+                        </form>
+                    )}
+                </motion.div>
+                </AnimatePresence>
             </main>
         </div>
     );
@@ -233,6 +311,8 @@ const Login = () => {
 
 const Dashboard = ({ customers, transactions, products, getCustomerMetrics }) => {
     const [dateFilter, setDateFilter] = useState('today');
+    const [customStartDate, setCustomStartDate] = useState('');
+    const [customEndDate, setCustomEndDate] = useState('');
 
     const getFilterDate = () => {
         const d = new Date();
@@ -243,6 +323,16 @@ const Dashboard = ({ customers, transactions, products, getCustomerMetrics }) =>
     };
 
     const filterTx = (txList) => {
+        if (dateFilter === 'custom' && customStartDate && customEndDate) {
+            const start = new Date(customStartDate);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(customEndDate);
+            end.setHours(23, 59, 59, 999);
+            return txList.filter(t => {
+                const d = new Date(t.date);
+                return d >= start && d <= end;
+            });
+        }
         if (dateFilter === 'week') {
             const start = getFilterDate();
             return txList.filter(t => new Date(t.date) >= start);
@@ -294,7 +384,7 @@ const Dashboard = ({ customers, transactions, products, getCustomerMetrics }) =>
 
     const recentTx = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 8);
 
-    const filterLabel = dateFilter === 'today' ? "Today" : dateFilter === 'yesterday' ? "Yesterday" : "Last 7 Days";
+    const filterLabel = dateFilter === 'today' ? "Today" : dateFilter === 'yesterday' ? "Yesterday" : dateFilter === 'week' ? "Last 7 Days" : "Custom Range";
 
     return (
         <div className="animate-fade-in">
@@ -303,12 +393,21 @@ const Dashboard = ({ customers, transactions, products, getCustomerMetrics }) =>
                     <h2 className="font-headline-lg text-headline-lg text-primary">Overview</h2>
                     <p className="text-on-surface-variant font-body-md">Welcome back. Here's what's happening — {filterLabel}.</p>
                 </div>
-                <div className="flex gap-sm">
-                    {['today', 'yesterday', 'week'].map(f => (
-                        <button key={f} onClick={() => setDateFilter(f)} className={`px-md py-xs rounded-lg text-label-md font-bold transition-all duration-300 ${dateFilter === f ? 'bg-primary text-on-primary shadow-sm' : 'bg-surface-container-low text-on-surface-variant border border-outline-variant hover:bg-surface-container-high'}`}>
-                            {f === 'today' ? 'Today' : f === 'yesterday' ? 'Yesterday' : 'Last 7 Days'}
-                        </button>
-                    ))}
+                <div className="flex flex-col items-end gap-sm">
+                    <div className="flex flex-wrap gap-sm">
+                        {['today', 'yesterday', 'week', 'custom'].map(f => (
+                            <button key={f} onClick={() => setDateFilter(f)} className={`px-md py-xs rounded-lg text-label-md font-bold transition-all duration-300 ${dateFilter === f ? 'bg-primary text-on-primary shadow-sm' : 'bg-surface-container-low text-on-surface-variant border border-outline-variant hover:bg-surface-container-high'}`}>
+                                {f === 'today' ? 'Today' : f === 'yesterday' ? 'Yesterday' : f === 'week' ? 'Last 7 Days' : 'Custom'}
+                            </button>
+                        ))}
+                    </div>
+                    {dateFilter === 'custom' && (
+                        <div className="flex gap-sm items-center bg-surface-container-low p-sm rounded-lg border border-outline-variant">
+                            <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} className="bg-white border border-outline-variant rounded px-2 py-1 text-sm" />
+                            <span className="text-on-surface-variant text-sm">to</span>
+                            <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} className="bg-white border border-outline-variant rounded px-2 py-1 text-sm" />
+                        </div>
+                    )}
                 </div>
             </div>
 
